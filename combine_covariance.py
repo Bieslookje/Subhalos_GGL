@@ -19,16 +19,12 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os
 
-# ------------------------------------------------------------------ #
 #  Parameters
-# ------------------------------------------------------------------ #
 NSIDE       = 1024
 VALID_PAIRS = [(i, j) for i in range(1, 6) for j in range(1, 5)]# if j > i]
 os.makedirs("plots", exist_ok=True)
 
-# ------------------------------------------------------------------ #
 #  Load covariances
-# ------------------------------------------------------------------ #
 print("Loading covariances...", flush=True)
 
 raw_gauss = np.load(f"cov_gaussian_full_nside{NSIDE}_v3.npy", allow_pickle=True).item()
@@ -40,9 +36,7 @@ cov_jk_dict       = {eval(k): v for k, v in raw_jk.items()}
 ells_binned = np.loadtxt("ells_binned.csv", delimiter=",")
 N_ELL       = len(ells_binned)
 
-# ------------------------------------------------------------------ #
 #  Combine
-# ------------------------------------------------------------------ #
 print("Combining covariances...", flush=True)
 
 cov_comb_dict = {}
@@ -61,16 +55,11 @@ for (i, j) in VALID_PAIRS:
     print(f"  Pair ({i},{j}): diag range "
           f"[{np.diag(cov_comb).min():.2e}, {np.diag(cov_comb).max():.2e}]")
 
-# ------------------------------------------------------------------ #
 #  Save
-# ------------------------------------------------------------------ #
 np.save(f"cov_comb_full_nside{NSIDE}.npy",
         {str(k): v for k, v in cov_comb_dict.items()})
 print("Saved cov_comb.", flush=True)
 
-# ------------------------------------------------------------------ #
-#  Helpers
-# ------------------------------------------------------------------ #
 def to_corr(cov):
     """Convert covariance to correlation matrix."""
     sigma = np.sqrt(np.diag(cov))
@@ -83,9 +72,7 @@ def plot_matrix(ax, mat, title, vmin=None, vmax=None, cmap="RdBu_r"):
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     return im
 
-# ------------------------------------------------------------------ #
 #  Per-pair diagnostic plots
-# ------------------------------------------------------------------ #
 print("Plotting per-pair diagnostics...", flush=True)
 
 for (i, j) in VALID_PAIRS:
@@ -105,7 +92,6 @@ for (i, j) in VALID_PAIRS:
     fig.suptitle(f"Covariance diagnostics — lens {i}, source {j}", fontsize=12)
     gs  = gridspec.GridSpec(2, 4, figure=fig, hspace=0.4, wspace=0.4)
 
-    # Row 0: correlation matrices
     ax0 = fig.add_subplot(gs[0, 0])
     ax1 = fig.add_subplot(gs[0, 1])
     ax2 = fig.add_subplot(gs[0, 2])
@@ -115,12 +101,10 @@ for (i, j) in VALID_PAIRS:
     plot_matrix(ax1, corr_jk,    "Corr (JK)",         vmin=-1, vmax=1)
     plot_matrix(ax2, corr_comb,  "Corr (Combined)",   vmin=-1, vmax=1)
 
-    # Difference: combined - gaussian correlation
     diff_corr = corr_comb - corr_gauss
     plot_matrix(ax3, diff_corr, "Corr: Comb - Gauss",
                 vmin=-0.3, vmax=0.3, cmap="coolwarm")
 
-    # Row 1: diagonal comparison + ratio
     ax4 = fig.add_subplot(gs[1, :2])
     ax5 = fig.add_subplot(gs[1, 2:])
 
@@ -146,9 +130,8 @@ for (i, j) in VALID_PAIRS:
     plt.close()
     print(f"  Saved plots/cov_pair_{i}_{j}.png")
 
-# ------------------------------------------------------------------ #
 #  Joint block-diagonal matrix plot
-# ------------------------------------------------------------------ #
+
 print("Plotting joint covariance matrices...", flush=True)
 
 def build_joint_corr(cov_dict, pairs):
@@ -182,14 +165,12 @@ for ax, mat, title in zip(axes,
     ax.set_title(title)
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-    # Draw block boundaries
     idx = 0
     for s in sizes[:-1]:
         idx += s
         ax.axhline(idx - 0.5, color="k", lw=0.5)
         ax.axvline(idx - 0.5, color="k", lw=0.5)
 
-    # Label pairs on x-axis
     tick_pos = []
     idx = 0
     for s, p in zip(sizes, VALID_PAIRS):
@@ -204,9 +185,7 @@ plt.savefig("plots/cov_joint.png", dpi=150, bbox_inches="tight")
 plt.close()
 print("  Saved plots/cov_joint.png")
 
-# ------------------------------------------------------------------ #
 #  Joint sigma comparison
-# ------------------------------------------------------------------ #
 sigma_gauss_all = build_joint_sigma(cov_gaussian_dict, VALID_PAIRS)
 sigma_jk_all    = build_joint_sigma(cov_jk_dict,       VALID_PAIRS)
 sigma_comb_all  = build_joint_sigma(cov_comb_dict,     VALID_PAIRS)
@@ -222,7 +201,6 @@ ax1.set_ylabel(r"$\sigma(C_\ell^{gE})$")
 ax1.set_yscale("log")
 ax1.legend(fontsize=9)
 
-# Draw pair boundaries
 idx = 0
 for s, p in zip(sizes, VALID_PAIRS):
     ax1.axvline(idx - 0.5, color="k", lw=0.5, ls="--", alpha=0.4)
