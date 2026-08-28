@@ -7,10 +7,7 @@ DES Y3 RedMaGiC x MetaCalibration.
 Signal Cls are estimated directly from the data:
   - Coupled pseudo-Cls are measured from the fields
   - Decoupled, then interpolated back to unbinned ell for input to
-    gaussian_covariance (which requires arrays of length lmax+1)
-
-Number densities and shape noise read from the official DES Y3 2pt file:
-  2pt_NG_final_2ptunblind_02_24_21_wnz_redmagic_covupdate.fits
+    gaussian_covariance 
 
 Outputs
 -------
@@ -24,9 +21,7 @@ import pymaster as nmt
 from scipy.interpolate import interp1d
 import gc
 
-# ------------------------------------------------------------------ #
 #  Parameters
-# ------------------------------------------------------------------ #
 NSIDE  = 1024
 LMIN   = 8
 LMAX   = 2048
@@ -35,9 +30,7 @@ N_BINS = 32
 VALID_PAIRS = [(i, j) for i in range(1, 6) for j in range(1, 5)]# if j > i]
 print(f"Valid (lens, source) pairs: {VALID_PAIRS}")
 
-# ------------------------------------------------------------------ #
-#  Binning
-# ------------------------------------------------------------------ #
+#  Binning scheme
 sqrt_edges  = np.linspace(np.sqrt(LMIN), np.sqrt(LMAX), N_BINS + 1)
 edges       = np.round(sqrt_edges ** 2).astype(int)
 edges[-1]   = LMAX + 1
@@ -46,19 +39,13 @@ ells_binned = b.get_effective_ells()
 N_ELL       = len(ells_binned)
 print(f"N_ELL = {N_ELL}")
 
-# ------------------------------------------------------------------ #
 #  Load catalogs
-# ------------------------------------------------------------------ #
-print("Loading catalogs...", flush=True)
 highdens        = fits.open('data/y3a2_gold2.2.1_redmagic_highdens.fits')[1].data
 highlum         = fits.open('data/y3a2_gold2.2.1_redmagic_highlum_highz.fits')[1].data
 random_highdens = fits.open('data/y3a2_gold2.2.1_redmagic_highdens_randoms.fits')[1].data
 random_highlum  = fits.open('data/y3a2_gold2.2.1_redmagic_highlum_highz_randoms.fits')[1].data
 
-# ------------------------------------------------------------------ #
-#  Survey mask
-# ------------------------------------------------------------------ #
-print("Building survey mask...", flush=True)
+#  Load mask
 hdu_sel     = fits.open('data/y3_gold_2.2.1_RING_joint_redmagic_v0.5.1_wide_maglim_v2.2_mask.fits')
 pixel_index = hdu_sel[1].data['HPIX']
 mask_value  = hdu_sel[1].data['FRACGOOD']
@@ -66,18 +53,12 @@ mask_map    = np.zeros(hp.nside2npix(4096), dtype=np.float64)
 mask_map[pixel_index] = mask_value
 mask_sel    = hp.ud_grade(mask_map, NSIDE)
 
-# ------------------------------------------------------------------ #
 #  Shear response
-# ------------------------------------------------------------------ #
 R_shear     = np.array([0.7636, 0.7182, 0.6887, 0.6154])
 R_selection = np.array([0.0046, 0.0083, 0.0126, 0.0145])
 R           = R_shear + R_selection
 
-# ------------------------------------------------------------------ #
-#  Number densities and shape noise from the DES Y3 2pt file
-# ------------------------------------------------------------------ #
-print("Reading n_gal and sigma_e from DES Y3 2pt file...", flush=True)
-
+#  Number densities and shape noise from DES 
 arcmin2_per_sr = (180.0 * 60.0 / np.pi) ** 2
 
 hdudes        = fits.open('data/2pt_NG_final_2ptunblind_02_24_21_wnz_redmagic_covupdate.fits')
@@ -104,9 +85,7 @@ for i in range(1, 6):
 
 hdudes.close()
 
-# ------------------------------------------------------------------ #
-#  Build full NmtFields
-# ------------------------------------------------------------------ #
+#  Build NmtFields
 print("Building NmtFields...", flush=True)
 
 def build_density_field(lens_cat, ran_cat, mask, nside, lmax):
@@ -145,13 +124,6 @@ for i in range(1, 6):
 
 print("NmtFields built.", flush=True)
 
-# ------------------------------------------------------------------ #
-#  Helper: decouple and interpolate back to unbinned ell
-#  gaussian_covariance requires coupled Cls of length lmax+1,
-#  but we want to use the decoupled (signal-level) estimates.
-#  Strategy: decouple -> interpolate onto full ell grid -> use as
-#  smooth signal input (noise added separately as flat spectrum).
-# ------------------------------------------------------------------ #
 ells_full = np.arange(LMAX + 1)
 
 def decouple_and_interpolate(ccl, workspace, ells_binned, lmax,
@@ -184,45 +156,35 @@ def decouple_and_interpolate(ccl, workspace, ells_binned, lmax,
         out.append(f(ells_full))
     return out   # list of (lmax+1,) arrays
 
-# ------------------------------------------------------------------ #
 #  Gaussian covariance
-# ------------------------------------------------------------------ #
-print("Computing Gaussian covariance...", flush=True)
-
 cov_gaussian = {}
 
 for (i, j) in VALID_PAIRS:
     print(f"  Pair ({i},{j})", flush=True)
 
-    # --- Workspaces ------------------------------------------------ #
+    #  Workspaces 
     w_ge = nmt.NmtWorkspace.from_fields(density_fields[i], shear_fields[j],  b)
     w_gg = nmt.NmtWorkspace.from_fields(density_fields[i], density_fields[i], b)
     w_ee = nmt.NmtWorkspace.from_fields(shear_fields[j],   shear_fields[j],   b)
 
-    # --- Coupled pseudo-Cls from data ------------------------------ #
+    # Coupled pseudo-Cls from data
     ccl_gg = nmt.compute_coupled_cell(density_fields[i], density_fields[i])  # (1, lmax+1)
     ccl_ge = nmt.compute_coupled_cell(density_fields[i], shear_fields[j])    # (2, lmax+1)
     ccl_ee = nmt.compute_coupled_cell(shear_fields[j],   shear_fields[j])    # (4, lmax+1)
 
-    # --- Decouple and interpolate to full ell grid ----------------- #
-    # gg: spin-0 x spin-0 -> 1 Cl
+    # Decouple and interpolate to full ell grid 
     cl_gg_full, = decouple_and_interpolate(ccl_gg, w_gg, ells_binned, LMAX)
-
-    # ge: spin-0 x spin-2 -> [GE, GB]
     cl_ge_full, cl_gb_full = decouple_and_interpolate(ccl_ge, w_ge, ells_binned, LMAX)
-
-    # ee: spin-2 x spin-2 -> [EE, EB, BE, BB]
     cl_ee_full, cl_eb_full, cl_be_full, cl_bb_full = \
         decouple_and_interpolate(ccl_ee, w_ee, ells_binned, LMAX)
 
-    # --- Noise power spectra (flat, added to auto-spectra) --------- #
+    # Noise 
     nl_gg = 1.0 / ngal_lens_dict[i]
     nl_ee = sige_source_dict[j]**2 / ngal_source_dict[j]
     print(f"    nl_gg={nl_gg:.3e}  nl_ee={nl_ee:.3e}  "
           f"mean(cl_gg)={cl_gg_full.mean():.3e}  "
           f"mean(cl_ee)={cl_ee_full.mean():.3e}", flush=True)
 
-    # Signal + noise
     cl_tt = cl_gg_full + nl_gg
     cl_te = cl_ge_full
     cl_tb = cl_gb_full
@@ -231,12 +193,12 @@ for (i, j) in VALID_PAIRS:
     cl_be = cl_be_full
     cl_bb = cl_bb_full + nl_ee
 
-    # --- Covariance workspace -------------------------------------- #
+    # Covariance workspace 
     cw = nmt.NmtCovarianceWorkspace.from_fields(
         density_fields[i], shear_fields[j],
         density_fields[i], shear_fields[j])
 
-    # --- Gaussian covariance — spins (0, 2, 0, 2) ----------------- #
+    #  Gaussian covariance 
     cov_g = nmt.gaussian_covariance(
         cw,
         0, 2, 0, 2,
@@ -257,10 +219,6 @@ for (i, j) in VALID_PAIRS:
     del ccl_gg, ccl_ge, ccl_ee
     gc.collect()
 
-# ------------------------------------------------------------------ #
-#  Save
-# ------------------------------------------------------------------ #
-print("Saving...", flush=True)
 
 def to_str_keys(d):
     return {str(k): v for k, v in d.items()}
