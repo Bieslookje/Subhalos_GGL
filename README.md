@@ -11,3 +11,4 @@ The Gaussian correlation matrix is computed in cov_gaussian.py and the Jackknife
 
 Finally, the tweaks_MCMC notebooks contain the full MCMC tweak parameter estimation pipeline.
 
+The most essential applications of the code are shown in tutorial.ipynb, including the comparison of the matter power spectra predicted by different models and likelihood calculations using DES data.
