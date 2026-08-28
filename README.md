@@ -7,7 +7,7 @@ SASHIMI-C (for CDM subhalos) is applied in batch_job_c.py and SASHIMI-SIDM in ba
 
 The power spectrum estimates are calculated from galaxy position and ellipticity data using the NaMaster method in pcls.py.
 
-The Gaussian correlation matrix is computed in cov_gaussian.py and the Jackknife covariance is computed in cov_jk.py.
+The Gaussian correlation matrix is computed in cov_gaussian.py and the Jackknife covariance is computed in cov_jk.py. The two are combined in combine_covariance.py.
 
 Finally, the tweaks_MCMC notebooks contain the full MCMC tweak parameter estimation pipeline.
 
